@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  webhook:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CONFIG_FILE=/app/config.json
+      - REDIS_HOST=${REDIS_HOST:-localhost}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - PORT=8080
+    volumes:
+      - ./config.json:/app/config.json:ro
+    restart: unless-stopped
