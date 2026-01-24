@@ -1,0 +1,6 @@
+[
+  {
+    "monzo-event-type": "transaction.created",
+    "channel": "monzo-webhook-transaction-created"
+  }
+]
