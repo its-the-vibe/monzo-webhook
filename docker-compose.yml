@@ -3,15 +3,18 @@ version: '3.8'
 services:
   webhook:
     build: .
+    read_only: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "8080:8080"
+      - "${PORT}:8080"
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CONFIG_FILE=/app/config.json
-      - REDIS_HOST=${REDIS_HOST:-localhost}
+      - REDIS_HOST=${REDIS_HOST:-host.docker.internal}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - PORT=8080
     volumes:
       - ./config.json:/app/config.json:ro
-    restart: unless-stopped
+    restart: on-failure:10
