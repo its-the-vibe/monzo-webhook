@@ -16,26 +16,23 @@ A simple web service which consumes Monzo Bank API events and publishes to Redis
 
 ### Event Configuration
 
-The webhook server uses a JSON configuration file to map Monzo event types to Redis pub/sub channels. Events not defined in the configuration file are ignored.
+The webhook server uses a JSON configuration file to specify the Redis pub/sub channel where all webhook events will be published. All event types from Monzo are accepted and published to this channel.
 
 **Configuration File Format:**
 
 Create a `config.json` file (or specify a custom path via `CONFIG_FILE` environment variable):
 
 ```json
-[
-  {
-    "monzo-event-type": "transaction.created",
-    "channel": "monzo-webhook-transaction-created"
-  }
-]
+{
+  "channel": "monzo-webhook"
+}
 ```
 
 **Environment Variables:**
 
 - `CONFIG_FILE`: Path to the configuration file (default: `config.json`)
 
-The server will examine the `type` field in the incoming webhook payload and publish to the corresponding Redis channel. If an event type is not configured, the webhook will be acknowledged but not processed.
+The server will examine the `type` field in the incoming webhook payload for logging purposes and publish all events to the configured Redis channel.
 
 **Example:**
 
@@ -91,7 +88,7 @@ PORT=3000 ./webhook-server
 
 ### Redis Configuration
 
-The webhook service publishes received webhooks to Redis pub/sub channels based on the event configuration. Each event type is routed to its configured channel.
+The webhook service publishes all received webhooks to a single Redis pub/sub channel specified in the configuration file.
 
 **Environment Variables:**
 
@@ -201,7 +198,7 @@ The docker-compose configuration automatically mounts the `config.json` file if 
 
 ### POST /webhook
 
-Accepts Monzo webhook notifications. The event type is determined from the `type` field in the JSON payload and routed to the corresponding Redis channel based on the configuration file.
+Accepts Monzo webhook notifications. All event types are accepted and published to the Redis channel specified in the configuration file.
 
 **Request Body Example:**
 ```json
@@ -223,7 +220,6 @@ Accepts Monzo webhook notifications. The event type is determined from the `type
 
 **Response:**
 - `200 OK`: Webhook received and processed successfully
-- `200 OK` (with message): Webhook received but event type not configured (event ignored)
 - `405 Method Not Allowed`: Non-POST request
 - `400 Bad Request`: Invalid JSON or request body error
 
@@ -232,7 +228,7 @@ Accepts Monzo webhook notifications. The event type is determined from the `type
 ### Manual Testing with curl
 
 ```bash
-# Test with a configured event type (transaction.created)
+# Test with a transaction.created event type
 curl -X POST http://localhost:8080/webhook \
   -H "Content-Type: application/json" \
   -d '{
@@ -246,10 +242,10 @@ curl -X POST http://localhost:8080/webhook \
     }
   }'
 
-# Test with an unconfigured event type (will be ignored)
+# Test with a different event type - all event types are now accepted
 curl -X POST http://localhost:8080/webhook \
   -H "Content-Type: application/json" \
-  -d '{"type": "unknown.event", "data": {}}'
+  -d '{"type": "account.balance_updated", "data": {}}'
 ```
 
 ### Testing with Redis
@@ -259,7 +255,7 @@ If you want to verify that messages are being published to Redis:
 ```bash
 # In one terminal, subscribe to the Redis channel
 redis-cli
-> SUBSCRIBE monzo-webhook-transaction-created
+> SUBSCRIBE monzo-webhook
 
 # In another terminal, send a test webhook
 curl -X POST http://localhost:8080/webhook \
