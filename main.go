@@ -24,16 +24,14 @@ const (
 	ERROR
 )
 
-// EventConfig represents the configuration for a Monzo event type
+// EventConfig represents the configuration for webhook events
 type EventConfig struct {
-	EventType string `json:"monzo-event-type"`
-	Channel   string `json:"channel"`
+	Channel string `json:"channel"`
 }
 
 var redisClient *redis.Client
 var currentLogLevel LogLevel = INFO
-var eventConfigs []EventConfig
-var eventChannelMap map[string]string
+var eventConfig EventConfig
 
 // parseLogLevel converts a string to LogLevel
 func parseLogLevel(level string) LogLevel {
@@ -86,15 +84,9 @@ func loadEventConfig(filename string) error {
 		return err
 	}
 
-	err = json.Unmarshal(data, &eventConfigs)
+	err = json.Unmarshal(data, &eventConfig)
 	if err != nil {
 		return err
-	}
-
-	// Build a map for quick lookup
-	eventChannelMap = make(map[string]string)
-	for _, config := range eventConfigs {
-		eventChannelMap[config.EventType] = config.Channel
 	}
 
 	return nil
@@ -132,17 +124,6 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	logInfo("Received webhook event: %s", eventType)
 
-	// Check if event is configured
-	channel, ok := eventChannelMap[eventType]
-	if !ok {
-		logInfo("Event type '%s' not configured, ignoring", eventType)
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("Webhook received but event type not configured")); err != nil {
-			logError("Error writing response: %v", err)
-		}
-		return
-	}
-
 	// Only log payload at DEBUG level
 	if currentLogLevel <= DEBUG {
 		jsonOutput, err := json.MarshalIndent(payload, "", "  ")
@@ -159,12 +140,12 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err = redisClient.Publish(ctx, channel, body).Err()
+		err = redisClient.Publish(ctx, eventConfig.Channel, body).Err()
 		if err != nil {
-			logError("Error publishing to Redis channel '%s': %v", channel, err)
+			logError("Error publishing to Redis channel '%s': %v", eventConfig.Channel, err)
 			// Don't fail the request if Redis publish fails
 		} else {
-			logInfo("Published webhook to Redis channel: %s", channel)
+			logInfo("Published webhook to Redis channel: %s", eventConfig.Channel)
 		}
 	}
 
@@ -192,10 +173,10 @@ func main() {
 	err := loadEventConfig(configFile)
 	if err != nil {
 		logError("Error loading configuration file '%s': %v", configFile, err)
-		logError("Please create a configuration file with event-to-channel mappings")
+		logError("Please create a configuration file with the channel name")
 		os.Exit(1)
 	}
-	logInfo("Loaded %d event configuration(s) from %s", len(eventConfigs), configFile)
+	logInfo("Loaded event configuration from %s: channel=%s", configFile, eventConfig.Channel)
 
 	// Configure Redis connection
 	redisHost := os.Getenv("REDIS_HOST")
