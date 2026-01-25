@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -106,8 +107,11 @@ func basicAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Get the Authorization header
 		username, password, ok := r.BasicAuth()
 
-		// Check if credentials are valid
-		if !ok || username != basicAuthUsername || password != basicAuthPassword {
+		// Check if credentials are valid using constant-time comparison to prevent timing attacks
+		usernameMatch := subtle.ConstantTimeCompare([]byte(username), []byte(basicAuthUsername)) == 1
+		passwordMatch := subtle.ConstantTimeCompare([]byte(password), []byte(basicAuthPassword)) == 1
+
+		if !ok || !usernameMatch || !passwordMatch {
 			logWarn("Unauthorized webhook request - invalid credentials")
 			w.Header().Set("WWW-Authenticate", `Basic realm="Webhook"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
