@@ -5,6 +5,7 @@ A simple web service which consumes Monzo Bank API events and publishes to Redis
 ## Features
 
 - Receives and parses Monzo webhook POST requests
+- HTTP Basic Authentication support for webhook endpoint security
 - Event filtering with configuration file support
 - Publishes webhook payloads to event-specific Redis pub/sub channels
 - Configurable log levels (DEBUG, INFO, WARN, ERROR)
@@ -13,6 +14,33 @@ A simple web service which consumes Monzo Bank API events and publishes to Redis
 - Docker and Docker Compose support for easy deployment
 
 ## Configuration
+
+### Basic Authentication
+
+The webhook endpoint can be secured with HTTP Basic Authentication. This is useful when registering webhooks with Monzo, as you can provide credentials in the URL:
+
+```
+https://username:password@your-endpoint.com/webhook
+```
+
+**Environment Variables:**
+
+- `WEBHOOK_USERNAME`: Username for basic authentication (optional)
+- `WEBHOOK_PASSWORD`: Password for basic authentication (optional)
+
+**Note:** Both `WEBHOOK_USERNAME` and `WEBHOOK_PASSWORD` must be set to enable basic authentication. If only one is set, authentication will be disabled and a warning will be logged. If neither is set, the webhook endpoint will be unprotected (backward compatible).
+
+**Example:**
+
+```bash
+# Run with basic authentication enabled
+WEBHOOK_USERNAME=myuser WEBHOOK_PASSWORD=mypass ./webhook-server
+
+# Run without basic authentication (backward compatible)
+./webhook-server
+```
+
+**Security Recommendation:** Always use HTTPS in production when using basic authentication to ensure credentials are transmitted securely.
 
 ### Event Configuration
 
@@ -132,8 +160,11 @@ LOG_LEVEL=DEBUG ./webhook-server
 # Run with Redis configuration
 REDIS_HOST=redis.example.com REDIS_PORT=6379 ./webhook-server
 
-# Run with all options
-LOG_LEVEL=DEBUG CONFIG_FILE=config.json REDIS_HOST=localhost PORT=8080 ./webhook-server
+# Run with basic authentication
+WEBHOOK_USERNAME=myuser WEBHOOK_PASSWORD=mypass ./webhook-server
+
+# Run with all options including basic auth
+LOG_LEVEL=DEBUG CONFIG_FILE=config.json REDIS_HOST=localhost PORT=8080 WEBHOOK_USERNAME=myuser WEBHOOK_PASSWORD=mypass ./webhook-server
 ```
 
 ### Using Docker
@@ -156,6 +187,9 @@ docker run -p 8080:8080 -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -v
 
 # Run with Redis password
 docker run -p 8080:8080 -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379 -e REDIS_PASSWORD=yourpassword -v $(pwd)/config.json:/app/config.json:ro monzo-webhook
+
+# Run with basic authentication
+docker run -p 8080:8080 -e WEBHOOK_USERNAME=myuser -e WEBHOOK_PASSWORD=mypass -v $(pwd)/config.json:/app/config.json:ro monzo-webhook
 ```
 
 ### Using Docker Compose
@@ -190,6 +224,9 @@ REDIS_HOST=192.168.1.100 REDIS_PORT=6379 docker-compose up -d
 
 # Redis password
 REDIS_PASSWORD=yourpassword docker-compose up -d
+
+# Basic authentication
+WEBHOOK_USERNAME=myuser WEBHOOK_PASSWORD=mypass docker-compose up -d
 ```
 
 The docker-compose configuration automatically mounts the `config.json` file if it exists.
@@ -220,12 +257,15 @@ Accepts Monzo webhook notifications. All event types are accepted and published 
 
 **Response:**
 - `200 OK`: Webhook received and processed successfully
+- `401 Unauthorized`: Missing or invalid basic authentication credentials (when authentication is enabled)
 - `405 Method Not Allowed`: Non-POST request
 - `400 Bad Request`: Invalid JSON or request body error
 
 ## Testing
 
 ### Manual Testing with curl
+
+**Without Basic Authentication:**
 
 ```bash
 # Test with a transaction.created event type
@@ -246,6 +286,31 @@ curl -X POST http://localhost:8080/webhook \
 curl -X POST http://localhost:8080/webhook \
   -H "Content-Type: application/json" \
   -d '{"type": "account.balance_updated", "data": {}}'
+```
+
+**With Basic Authentication:**
+
+```bash
+# Test with basic authentication credentials
+curl -X POST http://localhost:8080/webhook \
+  -u myuser:mypass \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "transaction.created",
+    "data": {
+      "id": "tx_test123",
+      "created": "2026-01-24T12:00:00Z",
+      "description": "Test transaction",
+      "amount": -100,
+      "currency": "GBP"
+    }
+  }'
+
+# Alternative: Manually specify the Authorization header
+curl -X POST http://localhost:8080/webhook \
+  -H "Authorization: Basic $(echo -n myuser:mypass | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{"type": "transaction.created", "data": {}}'
 ```
 
 ### Testing with Redis
@@ -269,7 +334,15 @@ To receive webhooks from Monzo:
 
 1. Register a webhook with Monzo API using your access token and account ID
 2. Provide your server's `/webhook` endpoint URL
-3. Monzo will send POST requests to this endpoint when transactions occur
+3. If using basic authentication, include credentials in the URL format: `https://username:password@your-endpoint.com/webhook`
+4. Monzo will send POST requests to this endpoint when transactions occur
+
+**Example with basic auth:**
+```
+https://myuser:mypass@your-server.com/webhook
+```
+
+**Security Note:** Always use HTTPS in production to ensure credentials and webhook data are transmitted securely.
 
 For more information, see the [Monzo API documentation](https://docs.monzo.com/#webhooks).
 

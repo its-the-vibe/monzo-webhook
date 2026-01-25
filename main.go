@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,6 +33,8 @@ type EventConfig struct {
 var redisClient *redis.Client
 var currentLogLevel LogLevel = INFO
 var eventConfig EventConfig
+var basicAuthUsername string
+var basicAuthPassword string
 
 // parseLogLevel converts a string to LogLevel
 func parseLogLevel(level string) LogLevel {
@@ -90,6 +93,35 @@ func loadEventConfig(filename string) error {
 	}
 
 	return nil
+}
+
+// basicAuthMiddleware checks HTTP Basic Authentication if configured
+func basicAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// If basic auth is not configured, skip authentication
+		if basicAuthUsername == "" && basicAuthPassword == "" {
+			next(w, r)
+			return
+		}
+
+		// Get the Authorization header
+		username, password, ok := r.BasicAuth()
+
+		// Check if credentials are valid using constant-time comparison to prevent timing attacks
+		usernameMatch := subtle.ConstantTimeCompare([]byte(username), []byte(basicAuthUsername)) == 1
+		passwordMatch := subtle.ConstantTimeCompare([]byte(password), []byte(basicAuthPassword)) == 1
+
+		if !ok || !usernameMatch || !passwordMatch {
+			logWarn("Unauthorized webhook request - invalid credentials")
+			w.Header().Set("WWW-Authenticate", `Basic realm="Webhook"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Authentication successful
+		logDebug("Basic auth successful for user: %s", username)
+		next(w, r)
+	}
 }
 
 func webhookHandler(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +210,20 @@ func main() {
 	}
 	logInfo("Loaded event configuration from %s: channel=%s", configFile, eventConfig.Channel)
 
+	// Load basic auth credentials from environment variables
+	basicAuthUsername = os.Getenv("WEBHOOK_USERNAME")
+	basicAuthPassword = os.Getenv("WEBHOOK_PASSWORD")
+
+	if basicAuthUsername != "" && basicAuthPassword != "" {
+		logInfo("Basic authentication enabled for webhook endpoint")
+	} else if basicAuthUsername != "" || basicAuthPassword != "" {
+		logWarn("Basic auth partially configured - both WEBHOOK_USERNAME and WEBHOOK_PASSWORD must be set. Authentication disabled.")
+		basicAuthUsername = ""
+		basicAuthPassword = ""
+	} else {
+		logInfo("Basic authentication not configured - webhook endpoint is unprotected")
+	}
+
 	// Configure Redis connection
 	redisHost := os.Getenv("REDIS_HOST")
 	redisPort := os.Getenv("REDIS_PORT")
@@ -209,7 +255,7 @@ func main() {
 		logInfo("Connected to Redis at %s", redisAddr)
 	}
 
-	http.HandleFunc("/webhook", webhookHandler)
+	http.HandleFunc("/webhook", basicAuthMiddleware(webhookHandler))
 
 	// Get port from environment variable, default to 8080
 	port := os.Getenv("PORT")
