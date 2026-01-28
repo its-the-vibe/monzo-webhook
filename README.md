@@ -346,6 +346,30 @@ https://myuser:mypass@your-server.com/webhook
 
 For more information, see the [Monzo API documentation](https://docs.monzo.com/#webhooks).
 
+## Helper Scripts
+
+The `scripts/` directory contains Python helper scripts for managing webhooks across all your Monzo accounts:
+
+- **`delete_webhooks.py`** - Delete all existing webhooks from all accounts
+- **`register_webhooks.py`** - Register a webhook URL with all accounts
+
+These scripts use the Monzo API to automate webhook management. See [scripts/README.md](scripts/README.md) for detailed usage instructions.
+
+**Quick example:**
+```bash
+# Install Python dependencies
+pip install -r scripts/requirements.txt
+
+# Set your Monzo access token
+export MONZO_ACCESS_TOKEN=your_token_here
+
+# Delete all existing webhooks
+python scripts/delete_webhooks.py
+
+# Register a new webhook for all accounts
+python scripts/register_webhooks.py https://your-server.com/webhook
+```
+
 ## Development
 
 The project follows standard Go conventions:

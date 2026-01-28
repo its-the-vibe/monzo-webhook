@@ -34,3 +34,12 @@ config.json
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
