@@ -18,10 +18,12 @@ Environment Variables:
 
 import os
 import sys
+from urllib.parse import urlparse
 import requests
 
 
 MONZO_API_BASE = "https://api.monzo.com"
+REQUEST_TIMEOUT = 30  # seconds
 
 
 def get_access_token():
@@ -41,7 +43,7 @@ def list_accounts(access_token):
     headers = {"Authorization": f"Bearer {access_token}"}
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return data.get("accounts", [])
@@ -60,12 +62,12 @@ def register_webhook(access_token, account_id, webhook_url):
     }
     
     try:
-        response = requests.post(url, headers=headers, data=data)
+        response = requests.post(url, headers=headers, data=data, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error registering webhook for account {account_id}: {e}", file=sys.stderr)
-        if hasattr(e.response, 'text'):
+        if hasattr(e, 'response') and e.response is not None:
             print(f"Response: {e.response.text}", file=sys.stderr)
         return None
 
@@ -84,6 +86,16 @@ def main():
     # Validate URL format
     if not webhook_url.startswith(("http://", "https://")):
         print("Error: Webhook URL must start with http:// or https://", file=sys.stderr)
+        sys.exit(1)
+    
+    # Validate URL structure
+    try:
+        parsed = urlparse(webhook_url)
+        if not parsed.netloc:
+            print("Error: Invalid webhook URL format", file=sys.stderr)
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: Invalid webhook URL: {e}", file=sys.stderr)
         sys.exit(1)
     
     print("Monzo Webhook Registration Tool")

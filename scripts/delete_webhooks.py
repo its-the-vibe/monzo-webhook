@@ -20,6 +20,7 @@ import requests
 
 
 MONZO_API_BASE = "https://api.monzo.com"
+REQUEST_TIMEOUT = 30  # seconds
 
 
 def get_access_token():
@@ -39,7 +40,7 @@ def list_accounts(access_token):
     headers = {"Authorization": f"Bearer {access_token}"}
     
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return data.get("accounts", [])
@@ -55,7 +56,7 @@ def list_webhooks(access_token, account_id):
     params = {"account_id": account_id}
     
     try:
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return data.get("webhooks", [])
@@ -70,7 +71,7 @@ def delete_webhook(access_token, webhook_id):
     headers = {"Authorization": f"Bearer {access_token}"}
     
     try:
-        response = requests.delete(url, headers=headers)
+        response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         return True
     except requests.exceptions.RequestException as e:

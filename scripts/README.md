@@ -4,7 +4,7 @@ This directory contains Python helper scripts to manage Monzo webhooks across al
 
 ## Prerequisites
 
-- Python 3.6 or higher
+- Python 3.9 or higher
 - A valid Monzo API access token
 - Install required dependencies:
   ```bash
@@ -67,10 +67,12 @@ python scripts/register_webhooks.py <webhook_url>
 python scripts/register_webhooks.py https://example.com/webhook
 ```
 
-**With basic authentication (recommended):**
+**With basic authentication (use with caution):**
 ```bash
 python scripts/register_webhooks.py https://username:password@example.com/webhook
 ```
+
+**Note:** Embedding credentials in URLs can expose them in logs and browser history. Use this approach only in secure, controlled environments. For production, ensure the webhook endpoint uses HTTPS and consider using alternative authentication methods provided by your webhook server.
 
 **What it does:**
 1. Lists all accounts for the logged-in user
