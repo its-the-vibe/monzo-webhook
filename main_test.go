@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -337,6 +338,137 @@ func TestMainBasicAuthEnvVarLoading(t *testing.T) {
 			}
 			if password != tt.expectedPassword {
 				t.Errorf("Expected password '%s', got '%s'", tt.expectedPassword, password)
+			}
+		})
+	}
+}
+
+func TestParseLogLevel(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected LogLevel
+	}{
+		{"DEBUG", DEBUG},
+		{"debug", DEBUG},
+		{"INFO", INFO},
+		{"info", INFO},
+		{"WARN", WARN},
+		{"warn", WARN},
+		{"ERROR", ERROR},
+		{"error", ERROR},
+		{"", INFO},
+		{"unknown", INFO},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := parseLogLevel(tt.input)
+			if got != tt.expected {
+				t.Errorf("parseLogLevel(%q) = %v, want %v", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLoadEventConfig(t *testing.T) {
+	t.Run("Valid config file", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "config.json")
+		if err := os.WriteFile(path, []byte(`{"channel":"test-channel"}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		origConfig := eventConfig
+		defer func() { eventConfig = origConfig }()
+
+		if err := loadEventConfig(path); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if eventConfig.Channel != "test-channel" {
+			t.Errorf("expected channel 'test-channel', got %q", eventConfig.Channel)
+		}
+	})
+
+	t.Run("File not found", func(t *testing.T) {
+		if err := loadEventConfig("/nonexistent/config.json"); err == nil {
+			t.Error("expected error for missing file, got nil")
+		}
+	})
+
+	t.Run("Invalid JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "bad.json")
+		if err := os.WriteFile(path, []byte(`not-json`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := loadEventConfig(path); err == nil {
+			t.Error("expected error for invalid JSON, got nil")
+		}
+	})
+}
+
+func TestWebhookHandlerEdgeCases(t *testing.T) {
+	origRedisClient := redisClient
+	origUsername := basicAuthUsername
+	origPassword := basicAuthPassword
+	defer func() {
+		redisClient = origRedisClient
+		basicAuthUsername = origUsername
+		basicAuthPassword = origPassword
+	}()
+
+	redisClient = nil
+	basicAuthUsername = ""
+	basicAuthPassword = ""
+
+	tests := []struct {
+		name           string
+		method         string
+		body           string
+		expectedStatus int
+	}{
+		{
+			name:           "GET request returns 405",
+			method:         http.MethodGet,
+			body:           "",
+			expectedStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:           "Invalid JSON returns 400",
+			method:         http.MethodPost,
+			body:           "not-json",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Missing type field returns 400",
+			method:         http.MethodPost,
+			body:           `{"data": {}}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Empty type field returns 400",
+			method:         http.MethodPost,
+			body:           `{"type": "", "data": {}}`,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Valid payload returns 200",
+			method:         http.MethodPost,
+			body:           `{"type": "transaction.created", "data": {}}`,
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, "/webhook", bytes.NewBufferString(tt.body))
+			if tt.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			rr := httptest.NewRecorder()
+			webhookHandler(rr, req)
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d", tt.expectedStatus, rr.Code)
 			}
 		})
 	}

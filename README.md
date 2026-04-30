@@ -1,5 +1,7 @@
 # monzo-webhook
 
+[![CI](https://github.com/its-the-vibe/monzo-webhook/actions/workflows/ci.yaml/badge.svg)](https://github.com/its-the-vibe/monzo-webhook/actions/workflows/ci.yaml)
+
 A simple web service which consumes Monzo Bank API events and publishes to Redis pub/sub
 
 ## Features
@@ -138,6 +140,19 @@ REDIS_HOST=redis.example.com REDIS_PORT=6379 REDIS_PASSWORD=yourpassword ./webho
 ```
 
 ## Building and Running
+
+### Make Commands
+
+```bash
+# Run all unit tests
+make test
+
+# Run linter (gofmt + go vet)
+make lint
+
+# Run all CI checks (lint + test)
+make ci
+```
 
 ### Local Development
 
