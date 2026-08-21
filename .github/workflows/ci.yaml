@@ -2,19 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+  call-common-ci:
+    uses: its-the-vibe/.github/.github/workflows/common-ci.yaml@main
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: Run CI checks
-        run: make ci
+      packages: write
+    secrets: inherit
